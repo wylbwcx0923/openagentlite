@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenAgentLite - 智能助手</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 800px;
+        }
+        .chat-container {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-top: 20px;
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .user-message {
+            background-color: #e3f2fd;
+            align-self: flex-end;
+            border-top-right-radius: 0;
+        }
+        .assistant-message {
+            background-color: #f1f1f1;
+            align-self: flex-start;
+            border-top-left-radius: 0;
+        }
+        .task-item {
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 10px;
+        }
+        .task-status {
+            font-weight: bold;
+        }
+        .status-pending {
+            color: #ffc107;
+        }
+        .status-running {
+            color: #17a2b8;
+        }
+        .status-completed {
+            color: #28a745;
+        }
+        .status-failed {
+            color: #dc3545;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mt-5 text-center">OpenAgentLite - 智能助手</h1>
+        
+        <!-- 聊天界面 -->
+        <div class="chat-container">
+            <h2 class="h4 mb-3">与助手对话</h2>
+            <div id="chat-messages" class="mb-3" style="max-height: 400px; overflow-y: auto;">
+                <!-- 消息将通过JavaScript动态添加 -->
+            </div>
+            <form id="chat-form" class="d-flex">
+                <label for="prompt"></label><input type="text" id="prompt" class="form-control me-2" placeholder="请输入您的问题..." required>
+                <button type="submit" class="btn btn-primary">发送</button>
+            </form>
+        </div>
+        
+        <!-- 任务历史 -->
+        <div class="mt-5">
+            <h2 class="h4">任务历史</h2>
+            <div id="task-list" class="mt-3">
+                <!-- 任务列表将通过JavaScript动态添加 -->
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 发送消息
+        document.getElementById('chat-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const prompt = document.getElementById('prompt').value;
+            
+            // 添加用户消息
+            addMessage('user', prompt);
+            document.getElementById('prompt').value = '';
+            
+            // 添加助手正在输入的消息
+            const assistantMessageId = addMessage('assistant', '<div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">加载中...</span></div>');
+            
+            try {
+                // 创建任务
+                const createResponse = await fetch('/api/tasks', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ prompt })
+                });
+                
+                const createData = await createResponse.json();
+                if (createData.error) {
+                    updateMessage(assistantMessageId, '错误: ' + createData.error);
+                    return;
+                }
+                
+                const taskId = createData.taskId;
+                
+                // 执行任务
+                const executeResponse = await fetch(`/api/tasks/${taskId}/execute`, {
+                    method: 'POST'
+                });
+                
+                const executeData = await executeResponse.json();
+                if (executeData.error) {
+                    updateMessage(assistantMessageId, '错误: ' + executeData.error);
+                } else {
+                    updateMessage(assistantMessageId, executeData.result);
+                }
+                
+                // 刷新任务列表
+                loadTasks();
+            } catch (error) {
+                updateMessage(assistantMessageId, '错误: ' + error.message);
+            }
+        });
+        
+        // 添加消息
+        function addMessage(type, content) {
+            const messagesContainer = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}-message d-flex`;
+            messageDiv.innerHTML = `<div>${content}</div>`;
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            return messageDiv;
+        }
+        
+        // 更新消息
+        function updateMessage(element, content) {
+            element.innerHTML = `<div>${content}</div>`;
+            const messagesContainer = document.getElementById('chat-messages');
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+        
+        // 加载任务列表
+        async function loadTasks() {
+            try {
+                const response = await fetch('/api/tasks');
+                const data = await response.json();
+                
+                const taskList = document.getElementById('task-list');
+                taskList.innerHTML = '';
+                
+                if (data.error) {
+                    taskList.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+                    return;
+                }
+                
+                const tasks = data.tasks;
+                if (Object.keys(tasks).length === 0) {
+                    taskList.innerHTML = '<div class="alert alert-info">暂无任务</div>';
+                    return;
+                }
+                
+                Object.values(tasks).forEach(task => {
+                    const taskItem = document.createElement('div');
+                    taskItem.className = 'task-item';
+                    
+                    let statusClass = '';
+                    switch (task.status) {
+                        case 'PENDING':
+                            statusClass = 'status-pending';
+                            break;
+                        case 'RUNNING':
+                            statusClass = 'status-running';
+                            break;
+                        case 'COMPLETED':
+                            statusClass = 'status-completed';
+                            break;
+                        case 'FAILED':
+                            statusClass = 'status-failed';
+                            break;
+                    }
+                    
+                    taskItem.innerHTML = `
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5 class="mb-1">任务 ${task.id.substring(0, 8)}</h5>
+                            <span class="task-status ${statusClass}">${task.status}</span>
+                        </div>
+                        <p class="mb-2"><strong>问题:</strong> ${task.prompt}</p>
+                        ${task.result ? `<p class="mb-2"><strong>结果:</strong> ${task.result}</p>` : ''}
+                        <div class="d-flex justify-content-between">
+                            <small class="text-muted">创建时间: ${task.createdAt}</small>
+                            <div>
+                                <button class="btn btn-sm btn-primary me-1" onclick="viewTask('${task.id}')">查看</button>
+                                <button class="btn btn-sm btn-danger" onclick="deleteTask('${task.id}')">删除</button>
+                            </div>
+                        </div>
+                    `;
+                    taskList.appendChild(taskItem);
+                });
+            } catch (error) {
+                document.getElementById('task-list').innerHTML = `<div class="alert alert-danger">加载任务失败: ${error.message}</div>`;
+            }
+        }
+        
+        // 查看任务
+        async function viewTask(taskId) {
+            try {
+                const response = await fetch(`/api/tasks/${taskId}`);
+                const task = await response.json();
+                
+                if (task.error) {
+                    alert(task.error);
+                    return;
+                }
+                
+                let statusText = '';
+                switch (task.status) {
+                    case 'PENDING':
+                        statusText = '待处理';
+                        break;
+                    case 'RUNNING':
+                        statusText = '运行中';
+                        break;
+                    case 'COMPLETED':
+                        statusText = '已完成';
+                        break;
+                    case 'FAILED':
+                        statusText = '失败';
+                        break;
+                }
+                
+                alert(`任务详情\nID: ${task.id}\n问题: ${task.prompt}\n结果: ${task.result || '暂无'}\n状态: ${statusText}\n创建时间: ${task.createdAt}\n更新时间: ${task.updatedAt}`);
+            } catch (error) {
+                alert('查看任务失败: ' + error.message);
+            }
+        }
+        
+        // 删除任务
+        async function deleteTask(taskId) {
+            if (!confirm('确定要删除这个任务吗？')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/tasks/${taskId}`, {
+                    method: 'DELETE'
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    loadTasks();
+                } else {
+                    alert('删除任务失败');
+                }
+            } catch (error) {
+                alert('删除任务失败: ' + error.message);
+            }
+        }
+        
+        // 页面加载时加载任务列表
+        window.onload = function() {
+            loadTasks();
+        };
+    </script>
+</body>
+</html>
