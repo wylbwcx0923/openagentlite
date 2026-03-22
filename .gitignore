@@ -11,6 +11,8 @@ target/
 
 .trae/*
 
+long-term-memory.txt
+
 ### Eclipse ###
 .apt_generated
 .classpath
