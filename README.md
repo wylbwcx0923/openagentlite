@@ -1,6 +1,6 @@
-# OpenClaw - Java 版本
+# OpenAgentLite
 
-OpenClaw 是一个基于 ReAct 框架的智能代理系统，支持工具调用、技能管理、多模型切换和记忆功能。
+基于JAVA语言纯原生开发的OpenClaw系统OpenAgentLite基于 ReAct 框架的智能代理系统，支持工具调用、技能管理、多模型切换和记忆功能。
 
 ## 技术栈
 
